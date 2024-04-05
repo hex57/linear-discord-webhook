@@ -25,6 +25,25 @@ function parseIdentifier(url: string) {
 	return url.split('/')[5].split('#')[0];
 }
 
+function getStatusIcon(status: string) {
+	switch (status) {
+		case 'Backlog':
+			return '<:Backlog:1225854832120827904>';
+		case 'Todo':
+			return '<:Todo:1225854838190116955>';
+		case 'In Progress':
+			return '<:InProgress:1225854836604669992>';
+		case 'Done':
+			return '<:Done:1225854833395896410>';
+		case 'Duplicate':
+			return '<:Duplicate:1225854834956042271>';
+		case 'Canceled':
+			return '<:Duplicate:1225854834956042271>';
+		default:
+			return '';
+	}
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
 	try {
 		const forwardedFor = req.headers['x-vercel-forwarded-for'] || '';
@@ -67,8 +86,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
 		switch (body.type) {
 			case Model.ISSUE: {
+				const creator = await linear.user(body.data.creatorId);
 				if (body.action === Action.CREATE) {
-					const creator = await linear.user(body.data.creatorId);
 					const identifier = parseIdentifier(body.url);
 					const teamUrl = `${LINEAR_BASE_URL}/team/${body.data.team.key}`;
 
@@ -76,7 +95,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 						.setTitle(`${identifier} ${body.data.title}`)
 						.setURL(body.url)
 						.setAuthor({ name: 'New issue added' })
-						.setFooter({ text: creator.name, iconURL: creator.avatarUrl })
 						.addFields(
 							{
 								name: 'Team',
@@ -85,17 +103,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 							},
 							{ name: 'Status', value: body.data.state.name, inline: true }
 						);
-
-					if (body.data.assignee) {
-						const assignee = await linear.user(body.data.assignee.id);
-
-						embed.addFields({
-							name: 'Assignee',
-							value: `[${assignee.displayName}](${assignee.url})`,
-							inline: true
-						});
-					}
-
+						
 					if (body.data.description) {
 						embed.setDescription(body.data.description);
 					}
@@ -108,8 +116,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 						.setURL(body.url)
 						.setAuthor({ name: 'Status changed' })
 						.setColor(body.data.state.color as any)
-						.setFooter({ text: creator.name, iconURL: creator.avatarUrl })
-						.setDescription(`Status: **${body.data.state.name}**`);
+						.setDescription(`${getStatusIcon(body.data.state.name)} **${body.data.state.name}**`);
+				}
+
+				if (body.data.assignee) {
+					const assignee = await linear.user(body.data.assignee.id);
+
+					embed.setFooter({ text: assignee.name, iconURL: assignee.avatarUrl })
+				} else {
+					embed.setFooter({ text: creator.name, iconURL: creator.avatarUrl });
 				}
 
 				break;
